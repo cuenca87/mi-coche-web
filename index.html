@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi coche</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mi coche">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6f9; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+  --accent:#dc2626; --accent-soft:#fee2e2; --ev:#16a34a; --ev-soft:#dcfce7;
+  --warn:#d97706; --route-all:#64748b; --shadow:0 1px 3px rgba(15,23,42,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b1120; --panel:#111827; --ink:#e5e7eb; --muted:#94a3b8; --line:#1f2937;
+    --accent:#f87171; --accent-soft:#3b1515; --ev:#4ade80; --ev-soft:#12311f;
+    --warn:#fbbf24; --route-all:#94a3b8; --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit}
+.hidden{display:none!important}
+
+/* ---- login ---- */
+#login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--bg);z-index:2000}
+#login form{width:100%;max-width:340px;text-align:center}
+#login h1{font-size:28px;margin:0 0 6px}
+#login p{color:var(--muted);margin:0 0 20px}
+#login input{width:100%;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font-size:17px;text-align:center;letter-spacing:.06em}
+#login button{margin-top:12px;width:100%;padding:14px;border:0;border-radius:12px;background:var(--accent);color:#fff;font-weight:600;font-size:17px}
+#login .err{color:var(--accent);min-height:1.4em;margin-top:10px}
+
+/* ---- layout ---- */
+#app{display:flex;flex-direction:column;height:100dvh}
+header{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 8px) 16px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:18px;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header small{color:var(--muted);font-size:12px;display:block;font-weight:400}
+.iconbtn{border:1px solid var(--line);background:var(--panel);border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.iconbtn svg{width:18px;height:18px}
+.spin svg{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+#map{height:40dvh;flex:none;background:var(--line)}
+nav{display:flex;background:var(--panel);border-bottom:1px solid var(--line)}
+nav button{flex:1;border:0;background:none;padding:11px 4px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer}
+nav button.on{color:var(--accent);border-bottom-color:var(--accent)}
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px calc(env(safe-area-inset-bottom) + 20px)}
+section{max-width:720px;margin:0 auto}
+
+/* ---- cards ---- */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.card.wide{grid-column:1/-1}
+.lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.big{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.15;margin-top:2px}
+.big small{font-size:14px;font-weight:500;color:var(--muted)}
+.sub{font-size:13px;color:var(--muted);margin-top:2px}
+.gauge{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin-top:8px}
+.gauge>div{height:100%;border-radius:5px;background:var(--accent)}
+.row{display:flex;align-items:center;gap:10px}
+.btn{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:10px;padding:9px 12px;background:var(--accent);color:#fff;font-weight:600;text-decoration:none;cursor:pointer}
+.btn.ghost{background:var(--accent-soft);color:var(--accent)}
+h2{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:20px 0 8px}
+
+/* ---- viajes ---- */
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+select{flex:1;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:15px}
+.toggle{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted);white-space:nowrap}
+.day{font-size:13px;font-weight:600;color:var(--muted);margin:14px 0 6px}
+.trip{display:grid;grid-template-columns:1fr auto;gap:2px 10px;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px;cursor:pointer}
+.trip.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.trip .t1{font-weight:600;font-variant-numeric:tabular-nums}
+.trip .t2{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.trip .km{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;font-size:12px;font-weight:600;border-radius:6px;padding:1px 6px;text-align:center}
+.b-ev{background:var(--ev-soft);color:var(--ev)}
+.evbar{height:4px;border-radius:2px;background:var(--line);grid-column:1/-1;margin-top:6px;overflow:hidden}
+.evbar>div{height:100%;background:var(--ev)}
+
+/* ---- estadísticas ---- */
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+th,td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{font-size:12px;color:var(--muted);font-weight:600}
+.bars{display:flex;align-items:flex-end;gap:4px;height:120px;margin-top:6px}
+.bars div{flex:1;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px;position:relative}
+.bars div span{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--muted)}
+.bars-wrap{padding-bottom:20px}
+.price{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
+.price input{width:70px;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:15px;text-align:right}
+.foot{color:var(--muted);font-size:12px;text-align:center;margin-top:24px}
+.foot button{border:0;background:none;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:12px}
+
+/* ---- selector de coche ---- */
+.seg{display:flex;background:var(--line);border-radius:10px;padding:3px;flex:none}
+.seg button{border:0;background:none;padding:6px 10px;border-radius:8px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
+.seg button.on{background:var(--panel);color:var(--accent);box-shadow:var(--shadow)}
+
+.carpin{font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.leaflet-container{font:inherit}
+@media (min-width:900px){
+  #app{display:grid;grid-template-columns:1fr 420px;grid-template-rows:auto auto 1fr}
+  header{grid-column:1/-1}
+  #map{grid-row:2/4;height:auto}
+  nav{grid-column:2}
+  main{grid-column:2}
+}
+</style>
+</head>
+<body>
+
+<div id="login" class="hidden">
+  <form id="loginForm" autocomplete="off">
+    <h1>🚗 Mi coche</h1>
+    <div id="bloqueFaceId" class="hidden">
+      <button type="button" id="btnFaceId" style="margin:8px 0 6px">🔓 Entrar con Face ID</button>
+      <p style="margin:14px 0 8px;font-size:13px">o con la clave</p>
+    </div>
+    <p id="txtClave">Introduce la clave de acceso</p>
+    <input id="clave" type="password" placeholder="xxxxx-xxxxx-xxxxx" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button type="submit">Entrar</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1 id="titulo">Mi coche<small id="actualizado"></small></h1>
+    <div class="seg hidden" id="selCoche" role="tablist" aria-label="Coche">
+      <button data-coche="yo" class="on">Mío</button>
+      <button data-coche="padre">Papá</button>
+    </div>
+    <button class="iconbtn" id="btnRecargar" title="Recargar datos" aria-label="Recargar datos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+    </button>
+  </header>
+  <div id="map"></div>
+  <nav>
+    <button data-tab="coche" class="on">Coche</button>
+    <button data-tab="viajes">Viajes</button>
+    <button data-tab="stats">Estadísticas</button>
+  </nav>
+  <main>
+    <section id="tab-coche"></section>
+    <section id="tab-viajes" class="hidden">
+      <div class="toolbar">
+        <select id="selMes"></select>
+        <label class="toggle"><input type="checkbox" id="chkTodas"> Todas en mapa</label>
+      </div>
+      <div id="detalle"></div>
+      <div id="listaViajes"></div>
+    </section>
+    <section id="tab-stats" class="hidden"></section>
+    <div class="foot">Datos de MyToyota, se actualizan cada 3 h · <button id="btnSalir">Cerrar sesión en este dispositivo</button></div>
+  </main>
+</div>
+
+<script>
+const LS_COCHE = 'micoche.coche';
+const LS_KEY = 'micoche.clave', LS_PRECIO = 'micoche.precio', LS_FID = 'micoche.faceid', LS_FID_NO = 'micoche.faceid.no';
+const TZ = 'Europe/Madrid';
+const $ = s => document.querySelector(s);
+const ls = {
+  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch {} },
+  del(k){ try { localStorage.removeItem(k); } catch {} }
+};
+const fmt = (n, d=0) => n == null || isNaN(n) ? '–' : n.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fHora = s => new Date(s).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',timeZone:TZ});
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const fDia = s => cap(new Date(s).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',timeZone:TZ}));
+const fFecha = s => new Date(s).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:TZ});
+const mesKey = s => new Date(s).toLocaleDateString('sv-SE',{timeZone:TZ}).slice(0,7);
+const mesNombre = k => { const [y,m]=k.split('-'); return new Date(+y,+m-1,15).toLocaleDateString('es-ES',{month:'long',year:'numeric'}); };
+const dur = s => { if(s==null) return '–'; const m=Math.round(s/60); return m<60 ? `${m} min` : `${Math.floor(m/60)} h ${String(m%60).padStart(2,'0')}`; };
+function hace(s){
+  const min = (Date.now()-new Date(s))/60000;
+  if (min < 1) return 'ahora mismo';
+  if (min < 60) return `hace ${Math.round(min)} min`;
+  if (min < 1440) return `hace ${Math.round(min/60)} h`;
+  const d = Math.round(min/1440); return `hace ${d} día${d>1?'s':''}`;
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---------- descifrado (AES-GCM + PBKDF2, igual que fetch_toyota.py) ----------
+async function descifrar(obj, pw){
+  const b = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt:b(obj.salt), iterations:obj.iter, hash:'SHA-256'},
+    base, {name:'AES-GCM', length:256}, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:b(obj.iv)}, key, b(obj.ct));
+  const st = new Blob([pt]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return JSON.parse(await new Response(st).text());
+}
+async function cargarUno(fichero, pw, opcional){
+  const r = await fetch(fichero + '?t=' + Date.now(), {cache:'no-store'}).catch(e => { if (opcional) return null; throw e; });
+  if (!r || !r.ok) { if (opcional) return null; throw new Error('No se pudieron descargar los datos (' + r.status + ')'); }
+  const obj = await r.json();
+  try { return await descifrar(obj, pw); }
+  catch { if (opcional) return null; const e = new Error('Clave incorrecta'); e.clave = true; throw e; }
+}
+// data.enc (mi coche) es obligatorio y valida la clave; data_padre.enc es opcional (misma clave)
+async function cargar(pw){
+  const [yo, padre] = await Promise.all([cargarUno('data.enc', pw, false), cargarUno('data_padre.enc', pw, true)]);
+  return {yo, padre};
+}
+
+// ---------- Face ID: passkey con extensión PRF ----------
+// La passkey (llavero de iCloud) devuelve, tras Face ID, un secreto de 32 bytes (PRF) que
+// cifra la clave de la app. En el dispositivo solo queda la clave cifrada; sin Face ID no se lee.
+const PRF_SALT = new TextEncoder().encode('micoche/prf/v1');
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const rnd = n => crypto.getRandomValues(new Uint8Array(n));
+const faceIdPosible = () => !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
+const faceIdGuardado = () => { try { return JSON.parse(ls.get(LS_FID)); } catch { return null; } };
+
+async function prfClave(out){
+  const k = await crypto.subtle.importKey('raw', out, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'HKDF', hash:'SHA-256', salt:new Uint8Array(0), info:new TextEncoder().encode('micoche-clave')},
+    k, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+}
+async function prfGet(id){
+  const a = await navigator.credentials.get({publicKey:{
+    challenge: rnd(32), timeout: 60000, userVerification: 'required',
+    allowCredentials: [{type:'public-key', id: unb64(id), transports: ['internal']}],   // solo en este iPhone (sin QR)
+    hints: ['client-device'],
+    extensions: {prf: {eval: {first: PRF_SALT}}}
+  }});
+  const out = a.getClientExtensionResults().prf?.results?.first;
+  if (!out) throw new Error('Este dispositivo no permite usar Face ID para descifrar');
+  return out;
+}
+let faceIdPendiente = null; // {id, pw} si iOS necesita un segundo toque para terminar de activar
+async function guardarConPrf(id, out, pw){
+  const iv = rnd(12);
+  const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, await prfClave(out), new TextEncoder().encode(pw));
+  ls.set(LS_FID, JSON.stringify({id, iv:b64(iv), ct:b64(ct)}));
+  ls.del(LS_KEY);           // a partir de aquí la clave ya no se guarda en claro
+  faceIdPendiente = null;
+}
+async function activarFaceId(pw){
+  if (faceIdPendiente) {   // segundo paso (iOS): leer el PRF con la passkey recién creada
+    return guardarConPrf(faceIdPendiente.id, await prfGet(faceIdPendiente.id), faceIdPendiente.pw);
+  }
+  const c = await navigator.credentials.create({publicKey:{
+    rp: {name:'Mi coche'},
+    user: {id: rnd(16), name: 'Mi coche', displayName: 'Mi coche'},
+    challenge: rnd(32), timeout: 60000,
+    pubKeyCredParams: [{type:'public-key', alg:-7}, {type:'public-key', alg:-257}],
+    authenticatorSelection: {residentKey:'required', userVerification:'required'},
+    extensions: {prf: {eval: {first: PRF_SALT}}}
+  }});
+  const ext = c.getClientExtensionResults().prf;
+  if (!ext || ext.enabled === false) throw new Error('Este dispositivo no permite usar Face ID para descifrar');
+  const id = b64(c.rawId);
+  if (ext.results?.first) return guardarConPrf(id, ext.results.first, pw);
+  faceIdPendiente = {id, pw};
+  try { await guardarConPrf(id, await prfGet(id), pw); }
+  catch (e) { if (e.name === 'NotAllowedError') { const x = new Error('Falta un paso: vuelve a pulsar el botón'); x.pendiente = true; throw x; } throw e; }
+}
+async function claveConFaceId(){
+  const f = faceIdGuardado();
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:unb64(f.iv)}, await prfClave(await prfGet(f.id)), unb64(f.ct));
+  return new TextDecoder().decode(pt);
+}
+
+// ---------- estado ----------
+let CLAVE = null, DATOS = {}, COCHE = ls.get(LS_COCHE) === 'padre' ? 'padre' : 'yo';
+let D = null, map, capaRutas, capaSel, capaAparcado, selId = null;
+
+function initMap(){
+  if (map) return;
+  map = L.map('map', {zoomControl:false, preferCanvas:true}).setView([40.42,-3.70], 12);
+  const ign = (layer, fmt='image/png') =>
+    `https://www.ign.es/wmts/${layer}&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}&format=${fmt}`;
+  const base = {
+    'Mapa IGN': L.tileLayer(ign('ign-base?service=WMTS&request=GetTile&version=1.0.0&layer=IGNBaseTodo'), {maxZoom:19, attribution:'© IGN'}),
+    'Ortofoto PNOA': L.tileLayer(ign('pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&layer=OI.OrthoimageCoverage','image/jpeg'), {maxZoom:19, attribution:'© IGN PNOA'}),
+    'OpenStreetMap': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'})
+  };
+  base['Mapa IGN'].addTo(map);
+  L.control.layers(base, null, {position:'topright'}).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  capaRutas = L.layerGroup().addTo(map);
+  capaSel = L.layerGroup().addTo(map);
+  capaAparcado = L.layerGroup().addTo(map);
+}
+
+function pintarAparcado(fit){
+  capaAparcado.clearLayers();
+  const a = D.aparcado; if (!a) return;
+  L.marker([a.lat,a.lon], {icon:L.divIcon({className:'', html:'<div class="carpin">🚗</div>', iconSize:[28,28], iconAnchor:[14,14]})})
+    .bindPopup(`<b>Aparcado</b><br>${a.fecha ? fFecha(a.fecha) : ''}`).addTo(capaAparcado);
+  if (fit) map.setView([a.lat,a.lon], 16);
+}
+
+// ---------- pestaña Coche ----------
+function renderCoche(){
+  const v = D.viajes;
+  const km = v.reduce((s,t)=>s+(t.km||0),0), lt = v.reduce((s,t)=>s+(t.litros||0),0), ev = v.reduce((s,t)=>s+(t.km_ev||0),0);
+  const mes = mesKey(new Date().toISOString());
+  const vm = v.filter(t => t.inicio && mesKey(t.inicio) === mes);
+  const kmMes = vm.reduce((s,t)=>s+(t.km||0),0), ltMes = vm.reduce((s,t)=>s+(t.litros||0),0);
+  const a = D.aparcado, pct = D.nivel_combustible_pct;
+  const ultimo = v[0];
+  const ofrecerFaceId = faceIdPosible() && !faceIdGuardado() && !ls.get(LS_FID_NO);
+  $('#tab-coche').innerHTML = `
+    ${ofrecerFaceId ? `<div class="card" id="cardFaceId" style="margin-bottom:10px">
+      <div style="font-weight:600">🔒 Proteger con Face ID</div>
+      <div class="sub" style="margin:4px 0 10px">La app se abrirá con tu cara y la clave dejará de guardarse en este dispositivo.</div>
+      <div class="row"><button class="btn" id="btnActivarFid">Activar Face ID</button><button class="btn ghost" id="btnNoFid">Ahora no</button></div>
+      <div class="sub" id="msgFid" style="margin-top:8px"></div>
+    </div>` : ''}
+    <div class="grid">
+      <div class="card wide">
+        <div class="lbl">Combustible</div>
+        <div class="row" style="justify-content:space-between">
+          <div class="big">${fmt(pct)}<small> %</small></div>
+          <div style="text-align:right"><div class="big">${fmt(D.autonomia_km)}<small> km</small></div><div class="sub">de autonomía</div></div>
+        </div>
+        <div class="gauge"><div style="width:${Math.max(0,Math.min(100,pct||0))}%;${pct<20?'background:var(--warn)':''}"></div></div>
+      </div>
+      <div class="card"><div class="lbl">Km totales</div><div class="big">${fmt(D.km_totales)}</div><div class="sub">odómetro</div></div>
+      <div class="card"><div class="lbl">Consumo medio</div><div class="big">${fmt(km?lt/km*100:null,1)}<small> L/100</small></div><div class="sub">${fmt(lt,0)} L en ${fmt(km)} km</div></div>
+      <div class="card"><div class="lbl">Este mes</div><div class="big">${fmt(kmMes)}<small> km</small></div><div class="sub">${fmt(kmMes?ltMes/kmMes*100:null,1)} L/100 · ${vm.length} viajes</div></div>
+      <div class="card"><div class="lbl">Modo eléctrico</div><div class="big" style="color:var(--ev)">${fmt(km?ev/km*100:null)}<small> %</small></div><div class="sub">de los km recorridos</div></div>
+      ${a ? `<div class="card wide">
+        <div class="lbl">Última posición aparcado</div>
+        <div style="margin:4px 0 2px;font-weight:600" id="dirAparcado">${fmt(a.lat,5)}, ${fmt(a.lon,5)}</div>
+        <div class="sub">${a.fecha ? fFecha(a.fecha) + ' · ' + hace(a.fecha) : ''}</div>
+        <div class="row" style="margin-top:10px;flex-wrap:wrap">
+          <a class="btn" href="https://maps.apple.com/?daddr=${a.lat},${a.lon}&dirflg=w" target="_blank" rel="noopener">🚶 Cómo llegar</a>
+          <button class="btn ghost" id="btnVerCoche">Ver en el mapa</button>
+        </div>
+      </div>` : ''}
+      ${ultimo ? `<div class="card wide">
+        <div class="lbl">Último viaje</div>
+        <div style="margin-top:4px;font-weight:600">${fDia(ultimo.inicio)}, ${fHora(ultimo.inicio)}–${fHora(ultimo.fin)}</div>
+        <div class="sub">${fmt(ultimo.km,1)} km · ${dur(ultimo.duracion_s)} · ${fmt(ultimo.l_100km,1)} L/100 · ${fmt(ultimo.km?ultimo.km_ev/ultimo.km*100:0)} % eléctrico</div>
+      </div>` : ''}
+    </div>`;
+  $('#btnVerCoche')?.addEventListener('click', () => pintarAparcado(true));
+  $('#btnNoFid')?.addEventListener('click', () => { ls.set(LS_FID_NO, '1'); $('#cardFaceId').remove(); });
+  $('#btnActivarFid')?.addEventListener('click', async () => {
+    const msg = $('#msgFid'); msg.textContent = '';
+    try {
+      await activarFaceId(CLAVE);
+      $('#cardFaceId').innerHTML = '<div style="font-weight:600;color:var(--ev)">✓ Face ID activado</div><div class="sub">La próxima vez la app se abrirá con Face ID.</div>';
+    } catch (e) {
+      msg.textContent = e.pendiente ? e.message : (e.name === 'NotAllowedError' ? 'Cancelado' : e.message);
+      if (e.pendiente) $('#btnActivarFid').textContent = 'Terminar de activar';
+    }
+  });
+  if (a) direccion(a.lat, a.lon);
+}
+async function direccion(lat, lon){
+  const k = `micoche.dir.${lat.toFixed(5)},${lon.toFixed(5)}`, c = ls.get(k);
+  const poner = t => { const el = $('#dirAparcado'); if (el && t) el.textContent = t; };
+  if (c) return poner(c);
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&accept-language=es`);
+    const j = await r.json(), ad = j.address || {};
+    const t = [[ad.road, ad.house_number].filter(Boolean).join(' '), ad.suburb || ad.neighbourhood, ad.city || ad.town || ad.village].filter(Boolean).join(', ');
+    if (t) { ls.set(k, t); poner(t); }
+  } catch {}
+}
+
+// ---------- pestaña Viajes ----------
+function renderViajes(){
+  const meses = [...new Set(D.viajes.filter(t=>t.inicio).map(t => mesKey(t.inicio)))];
+  const sel = $('#selMes'), prev = sel.value;
+  sel.innerHTML = meses.map(m => {
+    const n = D.viajes.filter(t => t.inicio && mesKey(t.inicio) === m).length;
+    return `<option value="${m}">${mesNombre(m)} (${n})</option>`;
+  }).join('');
+  if (meses.includes(prev)) sel.value = prev;
+  listaViajes();
+}
+function viajesMes(){ const m = $('#selMes').value; return D.viajes.filter(t => t.inicio && mesKey(t.inicio) === m); }
+function listaViajes(){
+  const vs = viajesMes();
+  let html = '', diaPrev = '';
+  for (const t of vs){
+    const d = fDia(t.inicio);
+    if (d !== diaPrev){
+      const delDia = vs.filter(x => fDia(x.inicio) === d);
+      html += `<div class="day">${d} · ${fmt(delDia.reduce((s,x)=>s+(x.km||0),0),1)} km</div>`;
+      diaPrev = d;
+    }
+    const evp = t.km ? t.km_ev / t.km * 100 : 0;
+    html += `<button class="trip${t.id===selId?' sel':''}" data-id="${esc(t.id)}">
+      <span class="t1">${fHora(t.inicio)} – ${fHora(t.fin)}</span>
+      <span class="km">${fmt(t.km,1)} km</span>
+      <span class="t2">${dur(t.duracion_s)} · ${fmt(t.l_100km,1)} L/100 · ${fmt(t.litros,2)} L</span>
+      <span><span class="badge b-ev">${fmt(evp)} % EV</span></span>
+      <span class="evbar"><div style="width:${evp}%"></div></span>
+    </button>`;
+  }
+  $('#listaViajes').innerHTML = html || '<p class="sub">Sin viajes este mes.</p>';
+  pintarTodas();
+}
+function pintarTodas(){
+  capaRutas.clearLayers();
+  if (!$('#chkTodas').checked) return;
+  const vs = viajesMes(), all = [];
+  for (const t of vs) if (t.ruta?.length > 1){
+    L.polyline(t.ruta, {color:getCss('--route-all'), weight:3, opacity:.55}).on('click', () => seleccionar(t.id, false)).addTo(capaRutas);
+    all.push(...t.ruta);
+  }
+  if (all.length && !selId) map.fitBounds(L.latLngBounds(all), {padding:[20,20]});
+}
+function seleccionar(id, scroll=true){
+  selId = id;
+  const t = D.viajes.find(x => x.id === id); if (!t) return;
+  capaSel.clearLayers();
+  document.querySelectorAll('.trip').forEach(b => b.classList.toggle('sel', b.dataset.id === id));
+  const acc = getCss('--accent');
+  if (t.ruta?.length > 1){
+    L.polyline(t.ruta, {color:'#fff', weight:8, opacity:.9}).addTo(capaSel);
+    const pl = L.polyline(t.ruta, {color:acc, weight:5}).addTo(capaSel);
+    map.fitBounds(pl.getBounds(), {padding:[24,24]});
+  }
+  const pt = (ll, c, txt) => ll && L.circleMarker(ll, {radius:7, color:'#fff', weight:2, fillColor:c, fillOpacity:1}).bindTooltip(txt).addTo(capaSel);
+  pt(t.origen, '#2563eb', 'Salida ' + fHora(t.inicio));
+  pt(t.destino, acc, 'Llegada ' + fHora(t.fin));
+  const evp = t.km ? t.km_ev / t.km * 100 : 0;
+  $('#detalle').innerHTML = `<div class="card" style="margin-bottom:12px">
+    <div class="row" style="justify-content:space-between"><div class="lbl">Viaje seleccionado</div>
+      <button class="iconbtn" style="width:30px;height:30px" id="btnCerrarSel" aria-label="Cerrar">✕</button></div>
+    <div style="font-weight:600;margin:2px 0 8px">${fDia(t.inicio)}, ${fHora(t.inicio)}–${fHora(t.fin)}</div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px">
+      <div><div class="lbl">Distancia</div><b>${fmt(t.km,1)} km</b></div>
+      <div><div class="lbl">Duración</div><b>${dur(t.duracion_s)}</b></div>
+      <div><div class="lbl">Vel. media</div><b>${t.duracion_s ? fmt(t.km/(t.duracion_s/3600)) : '–'} km/h</b></div>
+      <div><div class="lbl">Consumo</div><b>${fmt(t.l_100km,1)} L/100</b></div>
+      <div><div class="lbl">Litros</div><b>${fmt(t.litros,2)} L</b></div>
+      <div><div class="lbl">Eléctrico</div><b style="color:var(--ev)">${fmt(evp)} %</b></div>
+    </div>
+    <div class="sub" style="margin-top:8px">${fmt(t.km_ev,1)} km y ${dur(t.duracion_ev_s)} en modo eléctrico · puntuación de conducción ${fmt(t.puntuacion)}/100</div>
+  </div>`;
+  $('#btnCerrarSel').onclick = () => { selId = null; capaSel.clearLayers(); $('#detalle').innerHTML=''; document.querySelectorAll('.trip.sel').forEach(b=>b.classList.remove('sel')); };
+  if (scroll) $('main').scrollTo({top:0, behavior:'smooth'});
+}
+
+// ---------- pestaña Estadísticas ----------
+function renderStats(){
+  const precio = parseFloat(ls.get(LS_PRECIO)) || 1.55;
+  const porMes = {};
+  for (const t of D.viajes){
+    if (!t.inicio) continue;
+    const m = mesKey(t.inicio), o = porMes[m] ??= {n:0, km:0, lt:0, ev:0, s:0};
+    o.n++; o.km += t.km||0; o.lt += t.litros||0; o.ev += t.km_ev||0; o.s += t.duracion_s||0;
+  }
+  const meses = Object.keys(porMes).sort();
+  const maxKm = Math.max(...meses.map(m => porMes[m].km), 1);
+  const tot = meses.reduce((a,m) => { const o=porMes[m]; a.n+=o.n; a.km+=o.km; a.lt+=o.lt; a.ev+=o.ev; a.s+=o.s; return a; }, {n:0,km:0,lt:0,ev:0,s:0});
+  const corto = m => new Date(m+'-15').toLocaleDateString('es-ES',{month:'short'}).replace('.','');
+  $('#tab-stats').innerHTML = `
+    <div class="grid">
+      <div class="card"><div class="lbl">Viajes</div><div class="big">${fmt(tot.n)}</div><div class="sub">${dur(tot.s)} al volante</div></div>
+      <div class="card"><div class="lbl">Distancia</div><div class="big">${fmt(tot.km)}<small> km</small></div><div class="sub">${fmt(tot.n?tot.km/tot.n:0,1)} km por viaje</div></div>
+      <div class="card"><div class="lbl">Combustible</div><div class="big">${fmt(tot.lt)}<small> L</small></div><div class="sub">${fmt(tot.km?tot.lt/tot.km*100:0,2)} L/100 km</div></div>
+      <div class="card"><div class="lbl">Gasto estimado</div><div class="big">${fmt(tot.lt*precio)}<small> €</small></div>
+        <label class="price">a <input id="inPrecio" type="number" step="0.01" inputmode="decimal" value="${precio.toFixed(2)}"> €/L</label></div>
+    </div>
+    <h2>Km por mes</h2>
+    <div class="card bars-wrap"><div class="bars">${meses.map(m => `<div style="height:${porMes[m].km/maxKm*100}%" title="${fmt(porMes[m].km)} km"><span>${corto(m)}</span></div>`).join('')}</div></div>
+    <h2>Resumen mensual</h2>
+    <div class="card" style="padding:4px 10px;overflow-x:auto">
+      <table><thead><tr><th>Mes</th><th>Viajes</th><th>Km</th><th>Litros</th><th>L/100</th><th>% EV</th><th>€</th></tr></thead>
+      <tbody>${meses.slice().reverse().map(m => { const o=porMes[m]; return `<tr>
+        <td>${cap(mesNombre(m).replace(' de ', ' '))}</td><td>${o.n}</td><td>${fmt(o.km)}</td><td>${fmt(o.lt,1)}</td>
+        <td>${fmt(o.km?o.lt/o.km*100:0,1)}</td><td style="color:var(--ev)">${fmt(o.km?o.ev/o.km*100:0)}</td><td>${fmt(o.lt*precio)}</td></tr>`; }).join('')}</tbody></table>
+    </div>`;
+  $('#inPrecio').addEventListener('change', e => { const p = parseFloat(e.target.value); if (p > 0){ ls.set(LS_PRECIO, p); renderStats(); } });
+}
+
+// ---------- general ----------
+const getCss = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function ponerDatos(datos){
+  DATOS = datos;
+  if (!DATOS[COCHE]) COCHE = 'yo';
+  D = DATOS[COCHE];
+  $('#selCoche').classList.toggle('hidden', !DATOS.padre);
+  document.querySelectorAll('#selCoche button').forEach(b => b.classList.toggle('on', b.dataset.coche === COCHE));
+}
+function render(){
+  const esVin = /^[A-HJ-NPR-Z0-9]{17}$/.test(D.alias || '');   // sin alias, MyToyota devuelve el bastidor
+  $('#titulo').firstChild.textContent = (!esVin && D.alias) || (COCHE === 'padre' ? 'Coche de papá' : 'Mi coche');
+  $('#actualizado').textContent = 'Actualizado ' + hace(D.actualizado);
+  renderCoche(); renderViajes(); renderStats();
+  pintarAparcado(!selId && tabActual === 'coche');
+}
+let tabActual = 'coche';
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
+  tabActual = b.dataset.tab;
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + tabActual));
+  if (tabActual === 'coche') pintarAparcado(true);
+  if (tabActual === 'viajes') pintarTodas();
+  else capaRutas.clearLayers();
+  setTimeout(() => map.invalidateSize(), 50);
+}));
+$('#selCoche').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.dataset.coche === COCHE || !DATOS[b.dataset.coche]) return;
+  COCHE = b.dataset.coche; ls.set(LS_COCHE, COCHE);
+  selId = null; capaSel.clearLayers(); capaRutas.clearLayers(); $('#detalle').innerHTML = '';
+  ponerDatos(DATOS); render();
+  if (tabActual !== 'coche') pintarAparcado(false);
+});
+$('#selMes').addEventListener('change', () => { selId = null; capaSel.clearLayers(); $('#detalle').innerHTML=''; listaViajes(); });
+$('#chkTodas').addEventListener('change', pintarTodas);
+$('#listaViajes').addEventListener('click', e => { const b = e.target.closest('.trip'); if (b) seleccionar(b.dataset.id); });
+$('#btnSalir').addEventListener('click', () => {
+  if (!confirm('Se borrará la clave y el Face ID de este dispositivo. Tendrás que volver a escribir la clave.')) return;
+  [LS_KEY, LS_FID, LS_FID_NO].forEach(ls.del); location.reload();
+});
+$('#btnRecargar').addEventListener('click', async () => {
+  const b = $('#btnRecargar'); b.classList.add('spin');
+  try { ponerDatos(await cargar(CLAVE)); render(); } catch (e) { alert(e.message); }
+  b.classList.remove('spin');
+});
+
+async function arrancar(pw){
+  ponerDatos(await cargar(pw));
+  CLAVE = pw;
+  if (!faceIdGuardado()) ls.set(LS_KEY, pw);   // con Face ID activo nunca se guarda en claro
+  $('#login').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  initMap(); render();
+  setTimeout(() => map.invalidateSize(), 100);
+}
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const pw = $('#clave').value.trim().toLowerCase(); if (!pw) return;
+  $('#loginErr').textContent = 'Comprobando…';
+  try {
+    await arrancar(pw);
+    // Si había Face ID y se ha entrado con la clave, el Face ID guardado no sirve: se descarta y se ofrece de nuevo
+    if (faceIdGuardado()) { ls.del(LS_FID); ls.del(LS_FID_NO); ls.set(LS_KEY, pw); renderCoche(); }
+  } catch (err) { $('#loginErr').textContent = err.message; }
+});
+
+(async () => {
+  // Clave por enlace de instalación: index.html#k=xxxxx-xxxxx-xxxxx (se borra de la URL al momento)
+  const m = location.hash.match(/k=([\w-]+)/);
+  if (m){ ls.set(LS_KEY, m[1]); history.replaceState(null, '', location.pathname); }
+  if (faceIdGuardado()){
+    $('#bloqueFaceId').classList.remove('hidden');
+    $('#txtClave').classList.add('hidden');
+    $('#login').classList.remove('hidden');
+    const entrar = async () => {
+      $('#loginErr').textContent = '';
+      try { await arrancar(await claveConFaceId()); }
+      catch (err) {
+        $('#loginErr').textContent = err.name === 'NotAllowedError' ? ''
+          : err.name === 'OperationError' ? 'No se pudo descifrar con Face ID: entra con la clave'
+          : (err.message || 'Error con Face ID: entra con la clave');
+      }
+    };
+    $('#btnFaceId').addEventListener('click', entrar);
+    entrar();   // intenta lanzar Face ID directamente; si Safari pide un toque, queda el botón
+    return;
+  }
+  const pw = ls.get(LS_KEY);
+  if (pw){
+    try { await arrancar(pw); return; }
+    catch (err) { if (err.clave) ls.del(LS_KEY); $('#loginErr').textContent = err.message; }
+  }
+  $('#login').classList.remove('hidden');
+})();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
